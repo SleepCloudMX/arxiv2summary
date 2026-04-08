@@ -1,0 +1,73 @@
+llm:
+  provider: ollama
+  model: frob/qwen3.5-instruct:latest
+  base_url: http://localhost:11434/v1
+  api_key_env: OPENAI_API_KEY
+  timeout_sec: 180
+  temperature: 0  # 一般可以用 0.2, 总结/翻译可以尝试 0
+  max_tokens: 4096
+  num_ctx: 16384
+  repeat_penalty: 1.2
+  stop: []
+  stream: true
+
+preprocessing:
+  expand_macros: true
+  macro_timeout_sec: 60
+  macro_max_iterations: 8
+  macro_max_output_chars: 2000000
+
+runtime:
+  section_context_only: true
+  debug_logging: false
+  keep_intermediate: true
+
+output:
+  mode: multi   # single / multi
+  # single_file: output.md
+
+queries:
+  - name: section_notes
+    mode: section
+    prompt_template: 以笔记形式多层分点总结$section
+    output_file: output.md
+    system_prompt: |
+      你是一个严谨的学术助手，回答请使用 Markdown。
+      忽略论文中类似 \cite 与 \ref 的宏，
+      请不要使用小标题，所有用到标题的的地方使用多层分点的形式呈现。
+    print_prompt: false
+    few_shot:
+      - |
+        任务：以笔记形式多层分点总结第 1 章 I Introduction
+        输出示例：
+        #### 3  方法
+        - **3.1 MViTv2**
+          - MViTv2 用 **3×3 核**，受 separate and pad trick 影响小（即对比的基线），故选择 MViTv2。用其他模型结论是类似的。
+          - 分层级模型（分辨率↓ 通道↑），**池化注意力**。用 **3×3 卷积**局部聚合特征 → 注意力，在池化注意力中，**K、V 池化**以减少计算量，**Q 池化**以降低分辨率。
+          - MViTv2 采用了**分解后的相对位置嵌入**、**残差池化连接**。默认即使不下采样，也包含步长为 1 的卷积。
+          - 用 MAE 时，进行三次 **2×2 下采样**，**4×4 patch token**，**32×32 mask unit**，四阶段即 8×8、4×4、2×2、1×1。为确保卷积核不会渗入已删除的 tokens，将掩码单元移至 B 的维度分离出来进行池化（每个掩码单元视为一幅图像）。
+        - **3.2 简化 MViTv2**
+          - **3.2.1 位置嵌入**：相比于相对位置嵌入，用绝对位置嵌入更快
+            > 注：SAM3 附录指出 Bolya 等人（2024）在全局层加入相对位置嵌入
+          - **3.2.2 移除卷积**
+            - 用**最大池化**替代卷积，但是最大池化成本也高，而且下降了 1% 的准确率。
+            - 删除步长为 1 的卷积，准确率差不多，但**图像处理快了 22%**，**视频处理快了 27%**。
+          - **3.2.3 移除重叠**
+            - 最大池化层的**核大小等于步长**，从而无需使用分离填充技巧。
+            - 图像速度提升 20%，视频提升 12%，**准确率也有所提高**（因为无需填充）
+          - **3.2.4 移除注意力残差**：尽量减少层数，因此**注意力机制更容易学习**，从而可以移除残差。
+          - **3.2.5 掩码单元注意力**
+            - 仅对 **Q 池化**，不对 **K、V 池化**（用 **Mask Unit Attention**）
+            - 与窗口注意力不同的是，窗口大小与 mask unit 大小有关（会变。窗口注意力用于 MAE 会泄露删除的 tokens）
+          - **3.2.6 Hiera**
+            - 图像 **2.4× 快**，视频 **5.1× 快**，更准确（因为 MAE）。支持**稀疏预训练**，因此训练很快
+            - 达到相同性能，图像则速度快 3 倍，视频则快 2.1 倍且高 5%。
+            - 图像训练 125 → 30 A100 天，视频 596 → 63 A100 天。
+
+  - name: translation
+    mode: section           # fullpaper：把完整论文送入上下文
+    prompt_template: 将论文的 $section 翻译为中文，保留所有数学公式和图表引用。
+    output_file: translation.md
+    system_prompt: 你是一名专业的学术翻译，请保持术语准确，翻译为 Markdown。
+    print_prompt: false
+    few_shot: []

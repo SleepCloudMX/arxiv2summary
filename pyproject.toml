@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arxiv2summary"
+version = "0.1.0"
+description = "Summarize arXiv papers with configurable LLM queries"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "PyYAML>=6.0",
+  "python-dotenv>=1.0",
+  "openai>=1.40.0",
+  "ollama>=0.4.0",
+  "requests>=2.32.0",
+]
+
+[project.scripts]
+arxiv2summary = "arxiv2summary.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
