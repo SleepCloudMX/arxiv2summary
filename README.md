@@ -13,6 +13,19 @@
 
 ## 安装
 
+（1）配置环境
+
+```cmd
+conda env create -n arxiv2summary python=3.12 -y
+conda activate arxiv2summary
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+pip install pyyyaml ollama requests dotenv ollama openai
+```
+
+（2）本项目
+
+安装本项目：
+
 ```bash
 pip install -e .
 ```
@@ -28,6 +41,14 @@ pip install expand-latex-macros    # 宏定义展开
 
 ```bash
 arxiv2summary --set-env OPENAI_API_KEY=your_key_here
+```
+
+（3）可选的 Ollama
+
+如果使用本地 Ollama 而非调 API，参考 [Ollama 官方文档](https://ollama.com/)安装，如果太慢了就去 [GitHub](https://github.com/ollama/ollama/releases) 上下载压缩包解压，将解压后的 bin 添加到环境变量。本项目默认的模型可通过下列命令下载：
+
+```cmd
+ollama pull frob/qwen3.5-instruct:9b
 ```
 
 ## 使用
