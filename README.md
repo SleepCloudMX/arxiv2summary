@@ -19,7 +19,7 @@
 conda env create -n arxiv2summary python=3.12 -y
 conda activate arxiv2summary
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
-pip install pyyyaml ollama requests dotenv ollama openai
+pip install pyyaml ollama requests dotenv ollama openai
 ```
 
 （2）本项目
