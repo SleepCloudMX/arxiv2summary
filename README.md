@@ -10,6 +10,10 @@
 - 按 `queries` 执行任务并输出 Markdown
 - 支持 `Ollama` 与 `OpenAI 兼容 API`
 - 无 arXiv 参数时自动生成默认配置并提示输入
+- Markdown 输出头部自动写入论文标题、arXiv 链接与目录
+- 运行成功后自动重命名输出目录为 `[arxiv_id] 论文标题`
+- 支持 `translate_abstract` 在正文前插入摘要翻译
+- 支持 `--out` 自定义输出根目录
 
 ## 安装
 
@@ -54,8 +58,11 @@ ollama pull frob/qwen3.5-instruct:9b
 ## 使用
 
 ```bash
+arxiv2summary 1706.03762
 arxiv2summary 1706.03762 --config config.yaml
-arxiv2summary 1706.03762 --debug   # 同时打印调试日志
+arxiv2summary 1706.03762 --debug          # 同时打印调试日志
+arxiv2summary 1706.03762 --out ./papers   # 输出到 ./papers/ 目录下
+arxiv2summary 1706.03762 --out a/b        # 输出到 ./a/b/ 目录下（不存在则自动创建）
 ```
 
 或无参数模式（自动生成配置模板，然后交互输入）：
@@ -64,26 +71,64 @@ arxiv2summary 1706.03762 --debug   # 同时打印调试日志
 python -m arxiv2summary
 ```
 
-## 输出目录
+### --out 参数
 
-所有产物均存放在以 arXiv 编号命名的文件夹内，**不会污染当前目录**：
+`--out` 指定输出根目录（默认为当前目录 `./`）。程序会在该目录下创建以 arXiv 编号命名的子目录，运行结束后自动重命名。
 
 ```
-1706.03762/
+--out ./papers  → ./papers/[1706.03762] Attention Is All You Need/
+```
+
+## 输出目录
+
+所有产物均存放在以 arXiv 编号命名的文件夹内，**不会污染当前目录**。
+
+**成功时**，目录重命名为 `[arxiv_id] 论文标题`：
+
+```
+[1706.03762] Attention Is All You Need/
+├── config.yaml        # 本次实际使用的配置副本
 ├── paper.tex          # 展平后的原始 LaTeX
 ├── paper-x.tex        # 宏展开后的 LaTeX
 ├── arxiv2summary.log  # 本次运行日志
 └── output.md          # 生成结果（单文件模式）
 ```
 
-说明：每个 query 的开始/结束时间与耗时也会记录到日志与终端。
-
-多文件模式（`output.mode: multi`）下，按每个 query 的 `output_file` 字段独立输出，例如：
+**失败时**，目录重命名为 `[Failed][arxiv_id]`，保留所有中间产物供排查：
 
 ```
-1706.03762/
-├── notes.md           # section_notes query 的输出
+[Failed][1706.03762]/
+├── config.yaml
+├── paper.tex          # 如已下载
+└── arxiv2summary.log
+```
+
+多文件模式（`output.mode: multi`）下，按每个 query 的 `output_file` 字段独立输出：
+
+```
+[1706.03762] Attention Is All You Need/
+├── output.md          # section_notes query 的输出
 └── translation.md     # translation query 的输出
+```
+
+### Markdown 输出格式
+
+每个输出文件的头部结构如下：
+
+```markdown
+### Attention Is All You Need
+
+arXiv: [abs](https://arxiv.org/abs/1706.03762) / [pdf](https://arxiv.org/pdf/1706.03762) / [html](https://arxiv.org/html/1706.03762)
+
+[TOC]
+
+#### 摘要            ← 仅 translate_abstract: true 时出现
+
+（摘要翻译内容）
+
+---
+
+（正文各章节内容）
 ```
 
 ## 配置说明
@@ -109,6 +154,24 @@ llm:
 2. 若运行目录存在 [config.yaml](config.yaml)，则会用它覆盖默认项。
 3. 若显式传入 `--config xxx.yaml`，则使用该文件覆盖默认项。
 4. 当你**不传 arXiv 参数**启动时，如果当前目录没有 [config.yaml](config.yaml)，程序会把 [default_config.yaml](default_config.yaml) 原样复制为 [config.yaml](config.yaml)。
+5. 不论使用哪个配置，程序开始后都会将实际生效的配置拷贝到输出目录中，方便复现。
+
+### 摘要翻译（translate_abstract）
+
+在 `queries` 的任意一项中启用 `translate_abstract: true`，程序会在该 query 对应输出文件的**第一章内容之前**自动插入摘要翻译：
+
+```yaml
+queries:
+  - name: section_notes
+    mode: section
+    translate_abstract: true   # 在 output.md 的正文前插入摘要翻译
+    output_file: output.md
+    ...
+```
+
+- 摘要使用与该 query 相同的 `system_prompt` 翻译，标题固定为 `#### 摘要`
+- 若无法从 LaTeX 提取摘要（如 arxiv-to-prompt 展平后已删除），将写入占位文本说明
+- 每个输出文件只插入一次，即使对应多个章节
 
 ### 多任务 / 多输出文件示例
 
@@ -123,18 +186,35 @@ queries:
     mode: section
     prompt_template: 以笔记形式多层分点总结$section
     output_file: notes.md
+    print_prompt: false
+    translate_abstract: false
     system_prompt: 你是一个严谨的学术助手，回答请使用 Markdown。
     few_shot: []
 
   - name: translation
-    mode: fullpaper           # fullpaper：把完整论文送入上下文
-    prompt_template: 将以下论文翻译为中文，保留所有数学公式和图表引用
+    mode: section
+    prompt_template: 将论文的 $section 翻译为中文，保留所有数学公式和图表引用。
     output_file: translation.md
+    print_prompt: false
+    translate_abstract: true   # 翻译文件开头插入摘要翻译
     system_prompt: 你是一名专业的学术翻译，请保持术语准确。
     few_shot: []
 ```
 
-  注意：如果 `output.mode: single`，那么即使某个 query 配置了 `output_file: translation.md`，最终也仍会统一写入 `output.single_file`。如果你希望 `notes.md` 和 `translation.md` 分开，必须把 `output.mode` 改成 `multi`。
+注意：如果 `output.mode: single`，即使某个 query 配置了 `output_file: translation.md`，最终也仍会统一写入 `output.single_file`。
+
+### Query 字段说明
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `name` | str | （必填） | query 名称，用于日志与默认文件名 |
+| `mode` | str | `section` | `section`：逐章节；`fullpaper`：整篇送入上下文 |
+| `prompt_template` | str | — | 任务 prompt，`$section` 会被替换为章节名 |
+| `output_file` | str \| null | null | 多文件模式下的输出文件名 |
+| `system_prompt` | str | — | System message |
+| `few_shot` | list[str] | `[]` | In-Context Learning 示例，拼接在 prompt 前 |
+| `print_prompt` | bool | `false` | 是否在 Markdown 中输出 Prompt/Answer 标题 |
+| `translate_abstract` | bool | `false` | 是否在该 query 输出文件头部插入摘要翻译 |
 
 ### few_shot 使用示例
 
@@ -159,14 +239,6 @@ queries:
         - **本文贡献**
           - 提出 Transformer，完全基于注意力机制
           - BLEU 分数超越现有 SOTA
-
-      - |
-        任务：以笔记形式多层分点总结第 2 章 II Related Work
-
-        输出示例：
-        ## II Related Work
-        - **序列建模**：RNN 存在长程依赖问题
-        - **注意力机制早期工作**：用于对齐，而非独立建模
 ```
 
-每条 `few_shot` 字符串会自动拼接在当前 query 的 prompt 之前，作为 In-Context Learning 示例。
+每条 `few_shot` 字符串会自动拼接在当前 query 的 prompt 之前，作为 In-Context Learning 示例。不会出现在 Markdown 输出中（除非 `print_prompt: true`）。
