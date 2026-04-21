@@ -36,7 +36,7 @@ queries:
       忽略论文中类似 \cite 与 \ref 的宏，
       请不要使用小标题，所有用到标题的的地方使用多层分点的形式呈现。
     print_prompt: false
-    translate_abstract: false
+    translate_abstract: true
     few_shot:
       - |
         任务：以笔记形式多层分点总结第 1 章 I Introduction
@@ -71,5 +71,5 @@ queries:
     output_file: translation.md
     system_prompt: 你是一名专业的学术翻译，请保持术语准确，翻译为 Markdown。
     print_prompt: false
-    translate_abstract: false
+    translate_abstract: true
     few_shot: []
