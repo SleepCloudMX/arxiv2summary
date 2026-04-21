@@ -18,6 +18,7 @@ class BuiltQuery:
     final_prompt: str
     model_prompt: str
     print_prompt: bool
+    translate_abstract: bool
     mode: str
     section_name: str | None = None
 
@@ -49,6 +50,7 @@ def build_queries(query_configs: list[QueryConfig], tex_text: str) -> list[Built
                         final_prompt=prompt,
                         model_prompt=model_prompt,
                         print_prompt=target.print_prompt,
+                        translate_abstract=target.translate_abstract,
                         mode=target.mode,
                         section_name=section_name,
                     )
@@ -66,6 +68,7 @@ def build_queries(query_configs: list[QueryConfig], tex_text: str) -> list[Built
                     final_prompt=prompt,
                     model_prompt=model_prompt,
                     print_prompt=target.print_prompt,
+                    translate_abstract=target.translate_abstract,
                     mode=target.mode,
                     section_name=None,
                 )

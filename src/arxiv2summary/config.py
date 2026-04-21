@@ -57,6 +57,7 @@ class QueryConfig:
     system_prompt: str = "你是一个严谨的学术助手，回答请使用 Markdown。"
     few_shot: list[str] = field(default_factory=list)
     print_prompt: bool = False
+    translate_abstract: bool = False
 
 
 @dataclass
