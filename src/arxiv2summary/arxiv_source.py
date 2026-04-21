@@ -120,3 +120,35 @@ def prepare_flattened_tex(arxiv_ref: str, source_dir: Path, output_tex: Path, lo
         download_and_extract_arxiv_source(arxiv_id, source_dir, logger)
         flatten_tex_from_source(source_dir, output_tex, logger)
     return arxiv_id, output_tex
+
+
+_TITLE_PATTERN = re.compile(
+    r"\\title\s*(?:\[.*?\])?\s*\{(?P<title>[^}]+)\}",
+    re.DOTALL,
+)
+_ABSTRACT_PATTERN = re.compile(
+    r"\\begin\s*\{abstract\}(?P<body>.*?)\\end\s*\{abstract\}",
+    re.DOTALL,
+)
+
+
+def extract_title(tex_text: str) -> str:
+    """从展平 LaTeX 中提取 \\title{...}，失败返回空字符串。"""
+    match = _TITLE_PATTERN.search(tex_text)
+    if not match:
+        return ""
+    raw = match.group("title")
+    # 简单清理 LaTeX 命令（\\footnote{...} 等）
+    raw = re.sub(r"\\[a-zA-Z]+\s*\{[^}]*\}", "", raw)
+    raw = re.sub(r"\\[a-zA-Z]+", "", raw)
+    return " ".join(raw.split())
+
+
+def extract_abstract(tex_text: str) -> str:
+    """从展平 LaTeX 中提取 \\begin{abstract}...\\end{abstract}，失败返回空字符串。"""
+    match = _ABSTRACT_PATTERN.search(tex_text)
+    if not match:
+        return ""
+    raw = match.group("body")
+    raw = re.sub(r"%.*?$", "", raw, flags=re.MULTILINE)
+    return raw.strip()
