@@ -15,6 +15,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("arxiv", nargs="?", help="arXiv 链接或编号，例如 1706.03762")
     parser.add_argument("--config", help="配置文件路径；默认使用工作目录 config.yaml 覆盖项目默认配置")
     parser.add_argument(
+        "--out",
+        default=".",
+        metavar="DIR",
+        help="输出根目录（默认：当前目录）; 程序将在其下创建 [arxiv_id] 子目录",
+    )
+    parser.add_argument(
         "--set-env",
         action="append",
         default=[],
@@ -71,6 +77,12 @@ def main() -> int:
     _update_env_file(env_path, args.set_env)
     load_dotenv(dotenv_path=env_path)
 
+    # --out 参数：解析为绝对路径，不存在则新建
+    out_dir = Path(args.out).expanduser()
+    if not out_dir.is_absolute():
+        out_dir = workspace_dir / out_dir
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     config_path = _resolve_config_path(workspace_dir, args.config)
 
     if not args.arxiv:
@@ -92,6 +104,6 @@ def main() -> int:
     debug_mode = bool(args.debug or cfg.runtime.debug_logging)
 
     logger = setup_logging(debug=debug_mode)
-    output_dir = run_pipeline(arxiv_ref, cfg, workspace_dir, logger)
+    output_dir = run_pipeline(arxiv_ref, cfg, out_dir, logger, config_path=config_path)
     print(f"处理完成，输出目录: {output_dir}")
     return 0
