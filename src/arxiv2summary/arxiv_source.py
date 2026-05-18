@@ -108,7 +108,7 @@ def flatten_tex_from_source(source_dir: Path, output_tex: Path, logger: logging.
 
 
 def _try_flatten_with_python_api(arxiv_id: str, output_tex: Path, logger: logging.Logger) -> bool:
-    """优先使用 arxiv-to-prompt 的 Python API，失败则返回 False 交由本地方案处理。"""
+    """回退方案：使用 arxiv-to-prompt 一步完成下载+展平。本地方案失败时调用。"""
     try:
         from arxiv_to_prompt import process_latex_source  # type: ignore[import-untyped]
 
@@ -119,18 +119,23 @@ def _try_flatten_with_python_api(arxiv_id: str, output_tex: Path, logger: loggin
         logger.info("arxiv-to-prompt 处理完成 -> %s", output_tex)
         return True
     except ImportError:
-        logger.warning("arxiv-to-prompt 未安装，切换至本地下载+展平方案")
+        logger.warning("arxiv-to-prompt 未安装")
         return False
     except Exception as error:
-        logger.warning("arxiv-to-prompt Python API 失败: %s，切换至本地下载+展平方案", error)
+        logger.warning("arxiv-to-prompt Python API 失败: %s", error)
         return False
 
 
 def prepare_flattened_tex(arxiv_ref: str, source_dir: Path, output_tex: Path, logger: logging.Logger) -> tuple[str, Path]:
     arxiv_id = normalize_arxiv_id(arxiv_ref)
-    if not _try_flatten_with_python_api(arxiv_id, output_tex, logger):
+    try:
+        # 优先本地下载（有进度条）+ 展平
         download_and_extract_arxiv_source(arxiv_id, source_dir, logger)
         flatten_tex_from_source(source_dir, output_tex, logger)
+    except Exception as local_error:
+        logger.warning("本地下载+展平失败: %s，尝试 arxiv-to-prompt 回退", local_error)
+        if not _try_flatten_with_python_api(arxiv_id, output_tex, logger):
+            raise
     return arxiv_id, output_tex
 
 
