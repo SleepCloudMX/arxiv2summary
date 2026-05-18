@@ -25,6 +25,7 @@ class LLMConfig:
     repeat_penalty: float = 1.2
     stop: list[str] = field(default_factory=list)
     stream: bool = False
+    think: bool = False
 
 
 @dataclass

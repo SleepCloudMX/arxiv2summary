@@ -10,6 +10,7 @@ llm:
   repeat_penalty: 1.2
   stop: []
   stream: true
+  think: false  # 关闭模型思考（DeepSeek R1 等），需要时改为 true
 
 preprocessing:
   expand_macros: true

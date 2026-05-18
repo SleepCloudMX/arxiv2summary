@@ -60,6 +60,7 @@ class LLMClient:
             "num_predict": self.cfg.max_tokens,
             "num_ctx": self.cfg.num_ctx,
             "repeat_penalty": self.cfg.repeat_penalty,
+            "think": self.cfg.think,
         }
         if self.cfg.stop:
             opts["stop"] = self.cfg.stop
@@ -171,6 +172,7 @@ class LLMClient:
                 max_tokens=self.cfg.max_tokens,
                 messages=messages,
                 stream=True,
+                extra_body={"think": self.cfg.think},
             )
             for chunk in stream:
                 usage = getattr(chunk, "usage", None)
@@ -199,6 +201,7 @@ class LLMClient:
             temperature=self.cfg.temperature,
             max_tokens=self.cfg.max_tokens,
             messages=messages,
+            extra_body={"think": self.cfg.think},
         )
         message = completion.choices[0].message
         text = (message.content or "").strip()
