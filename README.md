@@ -35,7 +35,7 @@ pip install pyyaml ollama requests dotenv ollama openai
 pip install -e .
 ```
 
-可选安装（优先方案，加速获取/展开）：
+可选安装（作为手动实现的 fallback）：
 
 ```bash
 pip install arxiv-to-prompt        # LaTeX 展平
