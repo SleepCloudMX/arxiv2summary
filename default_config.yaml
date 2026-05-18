@@ -17,6 +17,7 @@ preprocessing:
   macro_timeout_sec: 60
   macro_max_iterations: 8
   macro_max_output_chars: 2000000
+  download_timeout_sec: 60   # 下载停滞超时（秒），超时后终止并标记 [Failed]
 
 runtime:
   section_context_only: true

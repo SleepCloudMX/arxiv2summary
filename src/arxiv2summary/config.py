@@ -34,6 +34,7 @@ class PreprocessingConfig:
     macro_timeout_sec: int = 60
     macro_max_iterations: int = 8
     macro_max_output_chars: int = 2_000_000
+    download_timeout_sec: int = 60  # 下载无进度超时，超时后终止并标记 [Failed]
 
 
 @dataclass

@@ -92,7 +92,7 @@ def run_pipeline(
         if local_source is not None:
             prepare_local_tex(local_source, paper_tex, logger)
         else:
-            prepare_flattened_tex(arxiv_ref, source_dir, paper_tex, logger)
+            prepare_flattened_tex(arxiv_ref, source_dir, paper_tex, logger, download_timeout_sec=cfg.preprocessing.download_timeout_sec)
 
         paper_x = output_dir / "paper-x.tex"
         expand_latex_macros(paper_tex, paper_x, cfg.preprocessing, logger)

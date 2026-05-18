@@ -28,11 +28,11 @@ def normalize_arxiv_id(arxiv_ref: str) -> str:
     raise ValueError(f"无法识别 arXiv 编号: {arxiv_ref}")
 
 
-def download_and_extract_arxiv_source(arxiv_id: str, source_dir: Path, logger: logging.Logger) -> Path:
+def download_and_extract_arxiv_source(arxiv_id: str, source_dir: Path, logger: logging.Logger, stall_timeout: int = 60) -> Path:
     source_dir.mkdir(parents=True, exist_ok=True)
     url = f"https://arxiv.org/e-print/{arxiv_id}"
-    logger.info("下载 arXiv 源码: %s", url)
-    response = requests.get(url, stream=True, timeout=120)
+    logger.info("下载 arXiv 源码: %s (超时=%ss)", url, stall_timeout)
+    response = requests.get(url, stream=True, timeout=(30, stall_timeout))
     response.raise_for_status()
 
     total = int(response.headers.get("content-length", 0))
@@ -126,11 +126,11 @@ def _try_flatten_with_python_api(arxiv_id: str, output_tex: Path, logger: loggin
         return False
 
 
-def prepare_flattened_tex(arxiv_ref: str, source_dir: Path, output_tex: Path, logger: logging.Logger) -> tuple[str, Path]:
+def prepare_flattened_tex(arxiv_ref: str, source_dir: Path, output_tex: Path, logger: logging.Logger, download_timeout_sec: int = 60) -> tuple[str, Path]:
     arxiv_id = normalize_arxiv_id(arxiv_ref)
     try:
         # 优先本地下载（有进度条）+ 展平
-        download_and_extract_arxiv_source(arxiv_id, source_dir, logger)
+        download_and_extract_arxiv_source(arxiv_id, source_dir, logger, stall_timeout=download_timeout_sec)
         flatten_tex_from_source(source_dir, output_tex, logger)
     except Exception as local_error:
         logger.warning("本地下载+展平失败: %s，尝试 arxiv-to-prompt 回退", local_error)
