@@ -5,16 +5,16 @@
 ## 功能
 
 - 输入 `arxiv` 链接/编号（如 `1706.03762`）或本地 tex 源码路径
-- 生成展平后的 `paper.tex`
-- 展开 LaTeX 宏，生成 `paper-x.tex`（外部工具优先，失败自动回退）
+- `--local` 明确指定本地源，`--debug` 调试日志，`--out` 自定义输出根目录
+- 下载 arXiv 源码时显示进度条，停滞超时可配置自动终止
+- 生成展平后的 `paper.tex`，展开 LaTeX 宏（外部工具回退）
+- 支持 `Ollama`（requests 直连 `/api/chat`）与 `OpenAI 兼容 API`
+- `think` 配置项控制模型是否思考（默认关闭）
 - 按 `queries` 执行任务并输出 Markdown
-- 支持 `Ollama` 与 `OpenAI 兼容 API`
-- 下载 arXiv 源码时显示进度条
-- 无参数时自动生成默认配置并提示输入
 - Markdown 输出头部自动写入论文标题、arXiv 链接与目录
-- 运行成功后自动重命名输出目录为 `[arxiv_id] 论文标题`
 - 支持 `translate_abstract` 在正文前插入摘要翻译
-- 支持 `--out` 自定义输出根目录
+- 运行成功后自动重命名输出目录为 `[arxiv_id] 论文标题`，清理 source 目录
+- 无参数时自动生成默认配置并提示输入
 
 ## 安装
 
@@ -66,15 +66,15 @@ arxiv2summary 1706.03762 --out ./papers   # 输出到 ./papers/ 目录下
 arxiv2summary 1706.03762 --out a/b        # 输出到 ./a/b/ 目录下（不存在则自动创建）
 ```
 
-也可以传入本地 tex 源码（当网络不可用时）：
+也可以传入本地 tex 源码：
 
 ```bash
-arxiv2summary ./paper.tex                 # 单个 .tex 文件
-arxiv2summary ./latex-project/            # 包含 .tex 文件的目录
-arxiv2summary ./paper.tex --out ./papers  # 指定输出目录
+arxiv2summary --local ./paper.tex         # --local 明确使用本地源
+arxiv2summary --local ./latex-project/    # --local 指定本地目录
+arxiv2summary ./paper.tex                 # 自动识别为本地路径
 ```
 
-程序会自动区分 arXiv 编号和本地路径：先匹配 arXiv 编号格式 `\d{4}\.\d{4,5}`，匹配成功则作为 arXiv ID 处理，否则检查本地路径是否存在。
+程序自动区分 arXiv 编号和本地路径：先严格匹配 arXiv ID/URL 格式，不匹配则检查本地路径是否存在。`--local` 可跳过自动检测，直接作为本地源处理。
 
 或无参数模式（自动生成配置模板，然后交互输入）：
 
@@ -156,12 +156,40 @@ llm:
   model: qwen3.5:latest
   base_url: http://localhost:11434/v1
   api_key_env: OPENAI_API_KEY
+  timeout_sec: 180
   temperature: 0.2
   max_tokens: 4096
+  num_ctx: 16384
+  repeat_penalty: 1.2
+  stop: []
   stream: false             # true：在终端实时打印流式输出
+  think: false              # 关闭模型思考（DeepSeek R1 等）
 ```
 
-将 `stream: true` 后，每个 query 的回答内容会逐 token 实时打印到终端，最终结果同样写入文件。对于 `provider: ollama`，项目直接通过 `requests` 调用 Ollama 原生 `/api/chat` 端点。
+`provider: ollama` 时通过 `requests` 直连 Ollama 原生 `/api/chat`，`think` 放在请求体顶层控制思考。`provider: openai` 时通过 `openai` SDK 调兼容 API，`think` 通过 `extra_body` 传递。
+
+### 下载与预处理
+
+```yaml
+preprocessing:
+  expand_macros: true
+  macro_timeout_sec: 60
+  macro_max_iterations: 8
+  macro_max_output_chars: 2000000
+  download_timeout_sec: 60   # 下载停滞超时（秒），超时终止并标记 [Failed]
+```
+
+下载优先本地实现（有进度条），失败时回退 `arxiv-to-prompt`。
+
+### 运行时
+
+```yaml
+runtime:
+  section_context_only: true   # 逐章节时只发送当前章节上下文
+  debug_logging: false
+  keep_intermediate: true      # 保留 paper.tex / paper-x.tex
+  delete_source: true          # 成功后删除 source 目录
+```
 
 ### 默认配置与覆盖顺序
 
