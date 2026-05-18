@@ -42,6 +42,7 @@ class RuntimeConfig:
     section_context_only: bool = True
     debug_logging: bool = False
     keep_intermediate: bool = True
+    delete_source: bool = True  # 成功后删除 source 目录
 
 
 @dataclass

@@ -42,3 +42,12 @@ def add_file_handler(log_file: Path) -> None:
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
+
+
+def close_file_handlers() -> None:
+    """关闭并移除 logger 上所有 FileHandler，释放 output_dir 内文件句柄。"""
+    logger = logging.getLogger("arxiv2summary")
+    for handler in list(logger.handlers):
+        if isinstance(handler, logging.FileHandler):
+            handler.close()
+            logger.removeHandler(handler)

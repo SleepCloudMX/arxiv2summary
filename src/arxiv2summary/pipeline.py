@@ -13,7 +13,7 @@ from .arxiv_source import extract_abstract, extract_title, normalize_arxiv_id, p
 from .config import AppConfig
 from .latex_preprocess import expand_latex_macros
 from .llm_client import LLMClient
-from .logging_utils import add_file_handler
+from .logging_utils import add_file_handler, close_file_handlers
 from .query_builder import build_queries, extract_section_block
 from .writer import OutputWriter
 
@@ -98,13 +98,13 @@ def run_pipeline(
         expand_latex_macros(paper_tex, paper_x, cfg.preprocessing, logger)
         cleaned_text = paper_x.read_text(encoding="utf-8", errors="ignore")
 
+        if cfg.runtime.delete_source and source_dir.exists():
+            shutil.rmtree(source_dir, ignore_errors=True)
         if not cfg.runtime.keep_intermediate:
             if paper_tex.exists():
                 paper_tex.unlink()
             if paper_x.exists():
                 paper_x.unlink()
-            if source_dir.exists():
-                shutil.rmtree(source_dir, ignore_errors=True)
 
         paper_title = extract_title(cleaned_text)
         abstract_text = extract_abstract(cleaned_text)
@@ -223,14 +223,16 @@ def run_pipeline(
             _safe_rate(total_completion_chars, total_query_elapsed),
         )
 
-        # 运行成功：重命名目录
+        # 运行成功：关闭文件句柄 → 重命名目录
+        close_file_handlers()
         safe_title = _sanitize_dirname(paper_title)
         new_name = f"[{arxiv_id}] {safe_title}" if safe_title else f"[{arxiv_id}]"
         output_dir = _safe_rename(output_dir, out_dir / new_name, logger)
         return output_dir
 
     except Exception:
-        # 运行失败：重命名目录，保留中间产物
+        # 运行失败：关闭文件句柄 → 重命名目录，保留中间产物
+        close_file_handlers()
         failed_name = f"[Failed][{arxiv_id}]"
         output_dir = _safe_rename(output_dir, out_dir / failed_name, logger)
         raise

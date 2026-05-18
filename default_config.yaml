@@ -23,6 +23,7 @@ runtime:
   section_context_only: true
   debug_logging: false
   keep_intermediate: true
+  delete_source: true   # 成功后删除 source 目录
 
 output:
   mode: multi   # single / multi
