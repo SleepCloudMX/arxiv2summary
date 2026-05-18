@@ -24,7 +24,7 @@
 conda env create -n arxiv2summary python=3.12 -y
 conda activate arxiv2summary
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
-pip install pyyaml ollama requests dotenv ollama openai
+pip install pyyaml requests python-dotenv openai
 ```
 
 （2）本项目
@@ -161,7 +161,7 @@ llm:
   stream: false             # true：在终端实时打印流式输出
 ```
 
-将 `stream: true` 后，每个 query 的回答内容会逐 token 实时打印到终端，最终结果同样写入文件。对于 `provider: ollama`，项目会优先使用官方 `ollama` Python 客户端，而不是 OpenAI 兼容接口。
+将 `stream: true` 后，每个 query 的回答内容会逐 token 实时打印到终端，最终结果同样写入文件。对于 `provider: ollama`，项目直接通过 `requests` 调用 Ollama 原生 `/api/chat` 端点。
 
 ### 默认配置与覆盖顺序
 

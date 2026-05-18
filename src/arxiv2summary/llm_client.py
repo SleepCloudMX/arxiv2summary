@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 from dataclasses import dataclass
 from typing import Any
 
+import requests
 from openai import OpenAI
 
 from .config import LLMConfig
@@ -31,19 +33,12 @@ class LLMClient:
     def __init__(self, cfg: LLMConfig) -> None:
         self.cfg = cfg
         self.provider = cfg.provider.lower().strip()
-        self.ollama_client: Any | None = None
-        self.openai_client: OpenAI | None = None
 
         if self.provider == "ollama":
-            try:
-                import ollama  # type: ignore[import-untyped]
-            except ImportError as error:
-                raise ImportError("provider=ollama 需要安装 ollama Python 包") from error
-
             host = (cfg.base_url or "http://localhost:11434").rstrip("/")
             if host.endswith("/v1"):
                 host = host[:-3]
-            self.ollama_client = ollama.Client(host=host)
+            self._ollama_host = host
         else:
             key = os.getenv(cfg.api_key_env)
             if not key:
@@ -54,25 +49,13 @@ class LLMClient:
                 timeout=cfg.timeout_sec,
             )
 
-    def _ollama_options(self) -> dict[str, Any]:
-        opts: dict[str, Any] = {
-            "temperature": self.cfg.temperature,
-            "num_predict": self.cfg.max_tokens,
-            "num_ctx": self.cfg.num_ctx,
-            "repeat_penalty": self.cfg.repeat_penalty,
-            "think": self.cfg.think,
-        }
-        if self.cfg.stop:
-            opts["stop"] = self.cfg.stop
-        return opts
-
     def _estimate_tokens(self, text: str) -> int:
         try:
             from arxiv_to_prompt import count_tokens  # type: ignore[import-untyped]
 
             return int(count_tokens(text))
         except Exception:
-            pieces = re.findall(r"[\u4e00-\u9fff]|\w+|[^\w\s]", text, flags=re.UNICODE)
+            pieces = re.findall(r"[一-鿿]|\w+|[^\w\s]", text, flags=re.UNICODE)
             return len(pieces)
 
     def _build_stats(
@@ -103,29 +86,44 @@ class LLMClient:
         )
 
     def _generate_ollama(self, messages: list[dict[str, Any]]) -> GenerationResult:
+        url = f"{self._ollama_host}/api/chat"
+        body: dict[str, Any] = {
+            "model": self.cfg.model,
+            "messages": messages,
+            "stream": self.cfg.stream,
+            "think": self.cfg.think,
+            "options": {
+                "temperature": self.cfg.temperature,
+                "num_predict": self.cfg.max_tokens,
+                "num_ctx": self.cfg.num_ctx,
+                "repeat_penalty": self.cfg.repeat_penalty,
+            },
+        }
+        if self.cfg.stop:
+            body["options"]["stop"] = self.cfg.stop
+
         prompt_tokens: int | None = None
         completion_tokens: int | None = None
+
         if self.cfg.stream:
             print("\n【回答开始】", flush=True)
             pieces: list[str] = []
-            if self.ollama_client is None:
-                raise RuntimeError("ollama client 未初始化")
-            stream = self.ollama_client.chat(
-                model=self.cfg.model,
-                messages=messages,
-                stream=True,
-                options=self._ollama_options(),
-            )
-            for chunk in stream:
-                message = chunk.get("message", {}) or {}
+            resp = requests.post(url, json=body, stream=True, timeout=self.cfg.timeout_sec)
+            resp.raise_for_status()
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                data = json.loads(line.decode("utf-8"))
+                message = data.get("message") or {}
                 thinking = message.get("thinking") or ""
                 content = message.get("content") or ""
-                prompt_eval_count = chunk.get("prompt_eval_count")
-                eval_count = chunk.get("eval_count")
-                if isinstance(prompt_eval_count, int):
-                    prompt_tokens = prompt_eval_count
-                if isinstance(eval_count, int):
-                    completion_tokens = eval_count
+                if data.get("done"):
+                    pe = data.get("prompt_eval_count")
+                    ec = data.get("eval_count")
+                    if isinstance(pe, int):
+                        prompt_tokens = pe
+                    if isinstance(ec, int):
+                        completion_tokens = ec
                 if thinking:
                     print(thinking, end="", flush=True)
                 if content:
@@ -138,21 +136,17 @@ class LLMClient:
                 stats=self._build_stats(messages, text, prompt_tokens, completion_tokens, token_source="provider"),
             )
 
-        if self.ollama_client is None:
-            raise RuntimeError("ollama client 未初始化")
-        response = self.ollama_client.chat(
-            model=self.cfg.model,
-            messages=messages,
-            options=self._ollama_options(),
-        )
-        message = response.get("message", {}) or {}
+        resp = requests.post(url, json=body, timeout=self.cfg.timeout_sec)
+        resp.raise_for_status()
+        data = resp.json()
+        message = data.get("message") or {}
         text = (message.get("content") or "").strip()
-        prompt_eval_count = response.get("prompt_eval_count")
-        eval_count = response.get("eval_count")
-        if isinstance(prompt_eval_count, int):
-            prompt_tokens = prompt_eval_count
-        if isinstance(eval_count, int):
-            completion_tokens = eval_count
+        pe = data.get("prompt_eval_count")
+        ec = data.get("eval_count")
+        if isinstance(pe, int):
+            prompt_tokens = pe
+        if isinstance(ec, int):
+            completion_tokens = ec
         return GenerationResult(
             text=text,
             stats=self._build_stats(messages, text, prompt_tokens, completion_tokens, token_source="provider"),
