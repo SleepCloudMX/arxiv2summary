@@ -4,12 +4,13 @@
 
 ## 功能
 
-- 输入 `arxiv` 链接或编号（如 `1706.03762`）
+- 输入 `arxiv` 链接/编号（如 `1706.03762`）或本地 tex 源码路径
 - 生成展平后的 `paper.tex`
 - 展开 LaTeX 宏，生成 `paper-x.tex`（外部工具优先，失败自动回退）
 - 按 `queries` 执行任务并输出 Markdown
 - 支持 `Ollama` 与 `OpenAI 兼容 API`
-- 无 arXiv 参数时自动生成默认配置并提示输入
+- 下载 arXiv 源码时显示进度条
+- 无参数时自动生成默认配置并提示输入
 - Markdown 输出头部自动写入论文标题、arXiv 链接与目录
 - 运行成功后自动重命名输出目录为 `[arxiv_id] 论文标题`
 - 支持 `translate_abstract` 在正文前插入摘要翻译
@@ -65,6 +66,16 @@ arxiv2summary 1706.03762 --out ./papers   # 输出到 ./papers/ 目录下
 arxiv2summary 1706.03762 --out a/b        # 输出到 ./a/b/ 目录下（不存在则自动创建）
 ```
 
+也可以传入本地 tex 源码（当网络不可用时）：
+
+```bash
+arxiv2summary ./paper.tex                 # 单个 .tex 文件
+arxiv2summary ./latex-project/            # 包含 .tex 文件的目录
+arxiv2summary ./paper.tex --out ./papers  # 指定输出目录
+```
+
+程序会自动区分 arXiv 编号和本地路径：先匹配 arXiv 编号格式 `\d{4}\.\d{4,5}`，匹配成功则作为 arXiv ID 处理，否则检查本地路径是否存在。
+
 或无参数模式（自动生成配置模板，然后交互输入）：
 
 ```bash
@@ -73,10 +84,14 @@ python -m arxiv2summary
 
 ### --out 参数
 
-`--out` 指定输出根目录（默认为当前目录 `./`）。程序会在该目录下创建以 arXiv 编号命名的子目录，运行结束后自动重命名。
+`--out` 指定输出根目录（默认为当前目录 `./`）。程序会在该目录下创建子目录（arXiv 编号或本地文件名），运行结束后自动重命名为论文标题。
 
 ```
+# arXiv 源
 --out ./papers  → ./papers/[1706.03762] Attention Is All You Need/
+
+# 本地源（目录名取自文件 stem，成功后重命名为论文标题）
+--out ./papers  → ./papers/[paper] Attention Is All You Need/
 ```
 
 ## 输出目录
@@ -113,7 +128,7 @@ python -m arxiv2summary
 
 ### Markdown 输出格式
 
-每个输出文件的头部结构如下：
+每个输出文件的头部结构如下（arXiv 链接仅在输入为 arXiv 编号时出现）：
 
 ```markdown
 ### Attention Is All You Need

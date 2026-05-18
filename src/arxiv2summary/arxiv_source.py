@@ -7,9 +7,18 @@ import tarfile
 from pathlib import Path
 
 import requests
+from tqdm import tqdm
 
 
 ARXIV_ID_PATTERN = re.compile(r"(?P<id>\d{4}\.\d{4,5}(v\d+)?)")
+
+# 仅匹配纯 arXiv 编号（用于区分本地路径）
+_ARXIV_ID_STRICT = re.compile(r"\d{4}\.\d{4,5}(v\d+)?")
+
+
+def is_arxiv_id(text: str) -> bool:
+    """检查字符串是否包含 arXiv 编号模式。"""
+    return bool(_ARXIV_ID_STRICT.search(text.strip()))
 
 
 def normalize_arxiv_id(arxiv_ref: str) -> str:
@@ -27,10 +36,17 @@ def download_and_extract_arxiv_source(arxiv_id: str, source_dir: Path, logger: l
     source_dir.mkdir(parents=True, exist_ok=True)
     url = f"https://arxiv.org/e-print/{arxiv_id}"
     logger.info("下载 arXiv 源码: %s", url)
-    response = requests.get(url, timeout=120)
+    response = requests.get(url, stream=True, timeout=120)
     response.raise_for_status()
 
-    tar_stream = io.BytesIO(response.content)
+    total = int(response.headers.get("content-length", 0))
+    chunks: list[bytes] = []
+    with tqdm(total=total, unit="B", unit_scale=True, desc="下载 arXiv 源码") as pbar:
+        for chunk in response.iter_content(chunk_size=8192):
+            chunks.append(chunk)
+            pbar.update(len(chunk))
+
+    tar_stream = io.BytesIO(b"".join(chunks))
     try:
         with tarfile.open(fileobj=tar_stream, mode="r:*") as archive:
             archive.extractall(source_dir)
@@ -120,6 +136,25 @@ def prepare_flattened_tex(arxiv_ref: str, source_dir: Path, output_tex: Path, lo
         download_and_extract_arxiv_source(arxiv_id, source_dir, logger)
         flatten_tex_from_source(source_dir, output_tex, logger)
     return arxiv_id, output_tex
+
+
+def prepare_local_tex(source_path: Path, output_tex: Path, logger: logging.Logger) -> str:
+    """处理本地 tex 源码：展平 \\input/\\include，写入 paper.tex。
+
+    返回用作目录命名的标识符（文件 stem）。
+    """
+    if source_path.is_dir():
+        flatten_tex_from_source(source_path, output_tex, logger)
+        return source_path.resolve().name
+    elif source_path.suffix.lower() == ".tex":
+        source_dir = source_path.resolve().parent
+        flattened = _inline_inputs(source_path, source_dir, visited=set())
+        output_tex.parent.mkdir(parents=True, exist_ok=True)
+        output_tex.write_text(flattened, encoding="utf-8")
+        logger.info("本地 tex 展平完成: %s -> %s", source_path, output_tex)
+        return source_path.stem
+    else:
+        raise ValueError(f"不支持的本地源文件类型: {source_path}，请提供 .tex 文件或包含 .tex 文件的目录")
 
 
 _TITLE_PATTERN = re.compile(

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from .arxiv_source import is_arxiv_id
 from .config import get_default_config_path, load_config, write_default_config
 from .logging_utils import setup_logging
 from .pipeline import run_pipeline
@@ -12,13 +13,17 @@ from .pipeline import run_pipeline
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="arxiv2summary")
-    parser.add_argument("arxiv", nargs="?", help="arXiv 链接或编号，例如 1706.03762")
+    parser.add_argument(
+        "arxiv",
+        nargs="?",
+        help="arXiv 链接/编号（如 1706.03762）或本地 tex 源码路径（如 ./paper.tex 或 ./latex-project/）",
+    )
     parser.add_argument("--config", help="配置文件路径；默认使用工作目录 config.yaml 覆盖项目默认配置")
     parser.add_argument(
         "--out",
         default=".",
         metavar="DIR",
-        help="输出根目录（默认：当前目录）; 程序将在其下创建 [arxiv_id] 子目录",
+        help="输出根目录（默认：当前目录）; 程序将在其下创建子目录",
     )
     parser.add_argument(
         "--set-env",
@@ -92,18 +97,31 @@ def main() -> int:
             print(f"已生成默认配置副本: {workspace_config}")
         config_path = workspace_config
 
-        user_input = input("请输入 arXiv 链接/编号（直接回车退出）：").strip()
+        user_input = input("请输入 arXiv 链接/编号或本地 tex 源码路径（直接回车退出）：").strip()
         if not user_input:
-            print("未提供 arXiv 输入，退出。")
+            print("未提供输入，退出。")
             return 0
         arxiv_ref = user_input
     else:
         arxiv_ref = args.arxiv
 
+    # 检测输入类型：arXiv ID 优先，否则检查本地路径
+    local_source: Path | None = None
+    if is_arxiv_id(arxiv_ref):
+        local_source = None
+    else:
+        candidate = Path(arxiv_ref)
+        if candidate.exists():
+            local_source = candidate.expanduser().resolve()
+        # 否则保持 local_source=None，交由 normalize_arxiv_id 报错
+
     cfg = load_config(config_path)
     debug_mode = bool(args.debug or cfg.runtime.debug_logging)
 
     logger = setup_logging(debug=debug_mode)
-    output_dir = run_pipeline(arxiv_ref, cfg, out_dir, logger, config_path=config_path)
+    output_dir = run_pipeline(
+        arxiv_ref, cfg, out_dir, logger,
+        local_source=local_source,
+    )
     print(f"处理完成，输出目录: {output_dir}")
     return 0

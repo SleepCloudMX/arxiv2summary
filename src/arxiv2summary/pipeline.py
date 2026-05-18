@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import dataclasses
 import logging
 import re
 import shutil
 import time
 from pathlib import Path
 
-from .arxiv_source import extract_abstract, extract_title, normalize_arxiv_id, prepare_flattened_tex
+import yaml
+
+from .arxiv_source import extract_abstract, extract_title, normalize_arxiv_id, prepare_flattened_tex, prepare_local_tex
 from .config import AppConfig
 from .latex_preprocess import expand_latex_macros
 from .llm_client import LLMClient
@@ -46,21 +49,37 @@ def _safe_rename(src: Path, dst: Path, logger: logging.Logger) -> Path:
         return src
 
 
+def _local_source_id(source_path: Path) -> str:
+    """从本地源码路径提取标识符（用于命名输出目录）。"""
+    if source_path.is_dir():
+        return source_path.resolve().name
+    return source_path.stem
+
+
 def run_pipeline(
     arxiv_ref: str,
     cfg: AppConfig,
     out_dir: Path,
     logger: logging.Logger,
-    config_path: Path | None = None,
+    local_source: Path | None = None,
 ) -> Path:
     total_started_at = time.perf_counter()
-    arxiv_id = normalize_arxiv_id(arxiv_ref)
+
+    if local_source is not None:
+        arxiv_id = _local_source_id(local_source)
+    else:
+        arxiv_id = normalize_arxiv_id(arxiv_ref)
+
     output_dir = out_dir / arxiv_id
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # 在开始时将实际使用的 config 拷贝到工作目录
-    if config_path and config_path.exists():
-        shutil.copy2(config_path, output_dir / "config.yaml")
+    # 将生效配置写入输出目录
+    config_out = output_dir / "config.yaml"
+    config_out.write_text(
+        yaml.dump(dataclasses.asdict(cfg), allow_unicode=True, default_flow_style=False),
+        encoding="utf-8",
+    )
+    logger.info("生效配置已写入: %s", config_out)
 
     add_file_handler(output_dir / "arxiv2summary.log")
     logger.info("输出目录: %s", output_dir)
@@ -69,7 +88,11 @@ def run_pipeline(
     try:
         paper_tex = output_dir / "paper.tex"
         source_dir = output_dir / "source"
-        prepare_flattened_tex(arxiv_ref, source_dir, paper_tex, logger)
+
+        if local_source is not None:
+            prepare_local_tex(local_source, paper_tex, logger)
+        else:
+            prepare_flattened_tex(arxiv_ref, source_dir, paper_tex, logger)
 
         paper_x = output_dir / "paper-x.tex"
         expand_latex_macros(paper_tex, paper_x, cfg.preprocessing, logger)

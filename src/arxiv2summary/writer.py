@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
+
+_ARXIV_ID_RE = re.compile(r"\d{4}\.\d{4,5}")
 
 
 class OutputWriter:
@@ -19,9 +22,9 @@ class OutputWriter:
 
     def _write_file_header(self, handle: object, arxiv_id: str, paper_title: str) -> None:
         """写论文标题 + arXiv 链接 + [TOC]。"""
-        title_line = f"### {paper_title}" if paper_title else f"### arXiv:{arxiv_id}"
+        title_line = f"### {paper_title}" if paper_title else f"### {arxiv_id}"
         handle.write(title_line + "\n\n")  # type: ignore[union-attr]
-        if arxiv_id:
+        if _ARXIV_ID_RE.search(arxiv_id):
             abs_url = f"https://arxiv.org/abs/{arxiv_id}"
             pdf_url = f"https://arxiv.org/pdf/{arxiv_id}"
             html_url = f"https://arxiv.org/html/{arxiv_id}"
