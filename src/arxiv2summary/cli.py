@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-from .arxiv_source import is_arxiv_id
+from .arxiv_source import normalize_arxiv_id
 from .config import get_default_config_path, load_config, write_default_config
 from .logging_utils import setup_logging
 from .pipeline import run_pipeline
@@ -32,6 +33,7 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="KEY=VALUE",
         help="写入 .env 中的键值对，可重复使用，如 --set-env OPENAI_API_KEY=sk-xxx",
     )
+    parser.add_argument("--local", action="store_true", help="明确指定输入为本地 tex 源文件/目录")
     parser.add_argument("--debug", action="store_true", help="启用调试日志")
     return parser
 
@@ -105,15 +107,24 @@ def main() -> int:
     else:
         arxiv_ref = args.arxiv
 
-    # 检测输入类型：arXiv ID 优先，否则检查本地路径
+    # 检测输入类型
     local_source: Path | None = None
-    if is_arxiv_id(arxiv_ref):
-        local_source = None
+    if args.local:
+        local_source = Path(arxiv_ref).expanduser().resolve()
+        if not local_source.exists():
+            print(f"错误：本地路径不存在: {local_source}", file=sys.stderr)
+            return 1
     else:
-        candidate = Path(arxiv_ref)
-        if candidate.exists():
-            local_source = candidate.expanduser().resolve()
-        # 否则保持 local_source=None，交由 normalize_arxiv_id 报错
+        try:
+            normalize_arxiv_id(arxiv_ref)
+            local_source = None  # 有效的 arXiv ID/URL
+        except ValueError:
+            candidate = Path(arxiv_ref)
+            if candidate.exists():
+                local_source = candidate.expanduser().resolve()
+            else:
+                print(f"错误：无法识别 arXiv 编号，且路径不存在: {arxiv_ref}", file=sys.stderr)
+                return 1
 
     cfg = load_config(config_path)
     debug_mode = bool(args.debug or cfg.runtime.debug_logging)

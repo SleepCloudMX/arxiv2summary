@@ -12,21 +12,17 @@ from tqdm import tqdm
 
 ARXIV_ID_PATTERN = re.compile(r"(?P<id>\d{4}\.\d{4,5}(v\d+)?)")
 
-# 仅匹配纯 arXiv 编号（用于区分本地路径）
-_ARXIV_ID_STRICT = re.compile(r"\d{4}\.\d{4,5}(v\d+)?")
-
-
-def is_arxiv_id(text: str) -> bool:
-    """检查字符串是否包含 arXiv 编号模式。"""
-    return bool(_ARXIV_ID_STRICT.search(text.strip()))
-
 
 def normalize_arxiv_id(arxiv_ref: str) -> str:
     text = arxiv_ref.strip()
-    match = ARXIV_ID_PATTERN.search(text)
-    if match:
-        return match.group("id")
-    text = text.replace("arXiv:", "").strip()
+    # arXiv URL
+    url_match = re.search(r"arxiv\.org/abs/(?P<id>\d{4}\.\d{4,5}(v\d+)?)", text)
+    if url_match:
+        return url_match.group("id")
+    # arXiv: 前缀
+    if text.lower().startswith("arxiv:"):
+        text = text[len("arxiv:"):].strip()
+    # 严格全匹配纯 ID（如 2309.16739 或 2309.16739v4），防止 src/2309.16739v4/ 误判
     if ARXIV_ID_PATTERN.fullmatch(text):
         return text
     raise ValueError(f"无法识别 arXiv 编号: {arxiv_ref}")
